@@ -1,0 +1,22 @@
+<?php
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
+
+class LogModel extends Model
+{
+	protected $connection = 'log';
+
+    public static function createVisitLog($store,$sessionId,$userId,$version,$ip,$imei,$uuid,$device,$os,$network)
+    {
+    	$sessionInfo=DB::connection('log')->select("call sp_log_login(?,?,?,?,?,?,?,?,?,?);",[$store,$sessionId,$userId,$version,$ip,$imei,$uuid,$device,$os,$network]);
+    	return $sessionInfo;
+    }
+    
+    public static function updateVisitLog($logId)
+    {
+    	DB::connection('log')->statement("call sp_update_login(?);",[$logId]);
+    }
+
+}
