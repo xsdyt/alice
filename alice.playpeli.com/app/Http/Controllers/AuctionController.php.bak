@@ -1,0 +1,186 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Response;
+use Illuminate\Support\Facades\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Input;
+use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Session;
+
+use App\Helpers\UtilsHelper;
+use App\Helpers\CmdHelper;
+use App\Helpers\RedisHelper;
+use App\Models\AuctionModel;
+use App\Models\DealerModel;
+
+class AuctionController extends Controller
+{
+    public function __construct()
+    {
+   //      $this->middleware('auth.manager');
+    }
+    
+	function anyCurrentList(){
+		$auctions = AuctionModel::getCurrentList();
+		$result = json_encode($auctions, JSON_UNESCAPED_UNICODE|JSON_NUMERIC_CHECK);
+		$response = Response::make($result, 200);
+		$response->header('Content-Type', 'text/html');
+		return $response;
+	}
+
+	function anyGetAuction()
+	{
+		$auctionId = Input::get('auctionid','0');
+		$auctions = AuctionModel::getAuction($auctionId);
+		$result = json_encode($auctions, JSON_UNESCAPED_UNICODE|JSON_NUMERIC_CHECK);
+		$response = Response::make($result, 200);
+		$response->header('Content-Type', 'text/html')
+		return $response;
+	}
+	
+	
+	function anyBid()
+	{
+		$auctionId = Input::get('auctionid','0');
+		$bid = Input::get('bid','0');
+		$auctions = AuctionModel::bid($auctionId,$bid);
+		$result = json_encode($auctions, JSON_UNESCAPED_UNICODE|JSON_NUMERIC_CHECK);
+		$response = Response::make($result, 200);
+		$response->header('Content-Type', 'text/html');
+		return $response;		
+		
+	}
+
+//显示后台主页面
+
+	function anyQuery()
+	{	
+	    $data['username'] = Session::get('username');
+	    $data['id'] = Session::get('id');
+		return view('admin.index_manage',$data);
+	}
+
+
+//显示后台进入界面
+	function anyWelcome(){
+       return view('admin.welcome');
+	}
+//拍卖部分
+
+//查询显示
+   function anyAuctionManage(){
+//    	   $auction = AuctionModel::AuctionSelect();
+//        $paging=AuctionModel::AuctionPaging();
+       $page = Input::get('page',1);//当前页。从第一页开始.
+       $pagesize = 5;//每页显示2条
+       $auction=AuctionModel::AuctionPagingSelect($page,$pagesize);
+       $auctions=AuctionModel::AuctionSelect();
+       $count = count( $auctions);
+       $totalpage = ceil($count/$pagesize);//总页数
+       $pre_page = $page==1?1:$page-1;
+       $next_page = $page==$totalpage?$totalpage:$page+1;
+       $data['page']= $page;
+       $data['pre_page']= $pre_page;
+       $data['next_page']= $next_page;
+       $data['totalpage']= $totalpage;
+   	   //需要拼接显示name
+   	   foreach ( $auction as $au){
+   	       $dealer = DealerModel::getDealer($au->dealer_id);
+   	       //echo $dealer[0]->name;
+   	       $au->dealer_name = $dealer[0]->name; 
+   	   }
+//    	  echo '<pre>';
+//     print_r($auction);exit;
+   	  $data['auctionselect'] =   $auction;
+      return view('admin.auction_manage',$data);
+	}
+//添加
+
+    public  function anyAuctionInsert()
+    {
+
+   	   $dealer_id=addslashes(Input::get('dealer_id','0'));
+       $winner_id=addslashes(Input::get('winner_id','0'));
+       $highest_bid=addslashes(Input::get('highest_bid','0'));
+       $watching=addslashes(Input::get('watching','0'));
+       $start_time=addslashes(Input::get('start_time','0'));
+       $end_time=addslashes(Input::get('end_time','0'));
+	   $users=AuctionModel::AuctionInsert($dealer_id ,$winner_id,$highest_bid,$watching,$start_time,$end_time);
+	   return redirect("auction/auction-manage");
+    }  
+
+
+//修改
+    public function anyAuctionUpdate()
+	{
+	   $id=addslashes(Input::get('id','0'));
+	   $dealer_id=addslashes(Input::get('dealer_id',''));
+       $winner_id=addslashes(Input::get('winner_id',''));
+       $highest_bid=addslashes(Input::get('highest_bid',''));
+       $watching=addslashes(Input::get('watching','0'));
+       $start_time=addslashes(Input::get('start_time',''));
+       $end_time=addslashes(Input::get('end_time',''));
+	   $users=AuctionModel::AuctionUpdate($id,$dealer_id ,$winner_id,$highest_bid,$watching,$start_time,$end_time);
+	   return redirect("auction/auction-manage");
+	}
+
+//删除
+   	public function anyAuctionDelete()
+	{
+		$id = Input::get('id','');
+		AuctionModel::AuctionDelete($id);
+		echo $this->anyAuctionManage();
+	}
+
+
+//修改更新页面
+	public function anyAuctionUpdatePage()
+	{
+		$id = Input::get('id','0');
+		$dealers = AuctionModel::AuctionQuery($id);
+		// echo json_encode($dealers);
+		$data['auction'] = $dealers[0];
+		//把ID显示过去
+		$auction_id=AuctionModel::AuctionSelectid();
+		$data['auction_id']=$auction_id;
+		//把名字显示过去
+		$array_row = DealerModel::DealerQueryAllNames();
+		$data['names'] = $array_row;
+		//echo '<pre>';
+		//print_r($array_row);exit();
+        return view('admin.auction_update',$data);	
+	}  
+
+	function anyAuctionModify(){
+
+       return view('admin.auction_update');
+	}
+
+
+	function anyAuctionAdd(){
+
+       return view('admin.auction_add');
+	}
+
+//分页查询
+  public function  anyAuctionPaging()
+  {
+      $paging=AuctionModel::AuctionPaging();
+      
+      //需要拼接显示name
+      foreach ($paging as $au){
+          $dealer = DealerModel::getDealer($au->dealer_id);
+          //echo $dealer[0]->name;
+          $au->dealer_name = $dealer[0]->name;
+      }
+      //    	  echo '<pre>';
+      //     print_r($auction);exit;
+      $data['auctionselect']=$paging;
+      return view('admin.auction_manage',$data);
+  }
+ //
+}
